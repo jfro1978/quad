@@ -30,5 +30,5 @@ void loop() {
   int potValue0 = analogRead(A0);
   packet[0] = map(potValue0, 0, 1023, 0, 255);
   radio.write(&packet, sizeof(packet));
-  Serial.print(packet[0]);
+  Serial.println(packet[0]);
 }
