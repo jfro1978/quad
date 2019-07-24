@@ -10,9 +10,13 @@
 
 #include <SPI.h>
 #include <RF24.h>
+#include <Servo.h>
 
 int packet[1];
+int PWM_signal_recvd;
+int PWM_signal_to_write;
 RF24 radio(7, 8); //CE and CSN pins on the Arduino
+Servo ESC;
 
 const byte address[6] = "00001";
 
@@ -24,6 +28,7 @@ void setup() {
   radio.setDataRate(RF24_250KBPS);
   radio.startListening();
 
+  ESC.attach(9, 1000, 2000);
 }
 
 //void function to apply speed to motors
@@ -32,5 +37,10 @@ void loop() {
   if (radio.available()){
     radio.read(packet, sizeof(packet));
   }
-  Serial.print(packet[0]);
+  PWM_signal_recvd = packet[0] - 125;
+
+  PWM_signal_to_write = map(PWM_signal_recvd, 0, 130, 0, 180);
+  ESC.write(PWM_signal_to_write);
+
+  Serial.println(PWM_signal_to_write);
 }
