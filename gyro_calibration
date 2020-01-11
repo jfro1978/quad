@@ -1,0 +1,158 @@
+#include <Wire.h>
+
+//Declare variables
+int IMU_Address = 104; //decimal conversion of B1101000
+int cal_int;
+
+int8_t X0, X2, X4 = 0; 
+uint8_t X1, X3, X5 = 0;
+int8_t pitch_high_offset, roll_high_offset, yaw_high_offset = 0;
+uint8_t pitch_low_offset, roll_low_offset, yaw_low_offset = 0;
+
+byte gyro_mask = B00000000;
+
+//float gyro_pitch, gyro_roll, gyro_yaw = 0;
+//float gyro_pitch_cal, gyro_roll_cal, gyro_yaw_cal = 0;
+//int32_t gyro_pitch, gyro_roll, gyro_yaw = 0;
+int16_t gyro_pitch, gyro_roll, gyro_yaw = 0;
+int32_t gyro_pitch_cal, gyro_roll_cal, gyro_yaw_cal = 0;
+
+#define GYRO_CONFIG 0x1B //Hex address of gyro config register
+#define GYRO_XOUT_H 0x43 //Starting register of gyro readings
+
+#define XG_OFFSET_H 0x13
+
+void setup() {
+  Serial.begin(9600);
+
+  Wire.begin();
+  
+  Wire.beginTransmission(IMU_Address);
+
+  Wire.write(GYRO_CONFIG);
+
+  Wire.write(gyro_mask);
+
+  Wire.endTransmission();
+
+  Serial.println("Starting calibration");
+
+  for(cal_int=0; cal_int<2000; cal_int++){
+    read_gyro();
+
+    gyro_pitch_cal += gyro_pitch;
+    gyro_roll_cal += gyro_roll;
+    gyro_yaw_cal += gyro_yaw;
+
+    delay(4);
+  }
+
+  Serial.println("Calibration complete");
+  //Determine the average offset
+  gyro_pitch_cal /= 2000;
+  gyro_roll_cal /= 2000;
+  gyro_yaw_cal /= 2000;
+
+  Serial.print("Pitch calibration = ");
+  Serial.println(gyro_pitch_cal/131);
+
+  Serial.print("Roll calibration = ");
+  Serial.println(gyro_roll_cal/131);
+
+  Serial.print("Yaw calibration = ");
+  Serial.println(gyro_yaw_cal/131);
+
+
+  //Now need to split the 16 bit average value up into 2 bytes, high and low
+  pitch_high_offset = (gyro_pitch_cal/4 >> 8) & 0xFF;
+  pitch_low_offset = (gyro_pitch_cal/4)       & 0xFF;
+
+  roll_high_offset = (gyro_roll_cal/4 >> 8) & 0xFF;
+  roll_low_offset = (gyro_roll_cal/4)       & 0xFF;
+
+  yaw_high_offset = (gyro_yaw_cal/4 >> 8) & 0xFF;
+  yaw_low_offset = (gyro_yaw_cal/4)       & 0xFF;
+
+  Serial.print("Pitch High Offset");
+  Serial.print(pitch_high_offset);
+  Serial.print("\t");
+  Serial.print("Pitch Low Offset");
+  Serial.print(pitch_low_offset);
+  Serial.print("\t");
+
+  Serial.print("Roll High Offset");
+  Serial.print(roll_high_offset);
+  Serial.print("\t");
+  Serial.print("Roll Low Offset");
+  Serial.print(roll_low_offset);
+  Serial.print("\t");
+
+  Serial.print("Yaw High Offset");
+  Serial.print(yaw_high_offset);
+  Serial.print("\t");
+  Serial.print("Yaw Low Offset");
+  Serial.println(yaw_low_offset);
+    
+  //Then, write these 6 bytes to the offset registers
+  Wire.beginTransmission(IMU_Address);
+
+  Wire.write(XG_OFFSET_H);
+
+  Wire.write(pitch_high_offset);
+  Wire.write(pitch_low_offset);
+
+  Wire.write(roll_high_offset);
+  Wire.write(roll_low_offset);
+
+  Wire.write(yaw_high_offset);
+  Wire.write(yaw_low_offset);
+
+  Wire.endTransmission();
+
+}
+
+void loop() {
+
+  read_gyro();
+
+  gyro_pitch /= 131;
+  gyro_roll /= 131;
+  gyro_yaw /= 131;
+
+  //Readings should be very close to zero when stationary
+  Serial.print(gyro_pitch);
+  Serial.print("\t");
+
+  Serial.print(gyro_roll);
+  Serial.print("\t");
+
+  Serial.println(gyro_yaw);
+
+  delay(100);
+}
+
+void read_gyro(){
+  Wire.beginTransmission(IMU_Address);
+
+  Wire.write(GYRO_XOUT_H);
+
+  Wire.endTransmission();
+
+  Wire.requestFrom(IMU_Address, 6);
+
+  if(Wire.available() <= 6)
+  {
+    X0 = Wire.read();
+    X1 = Wire.read();
+
+    X2 = Wire.read();
+    X3 = Wire.read();
+
+    X4 = Wire.read();
+    X5 = Wire.read();
+  }
+
+  gyro_pitch = X0 << 8 | X1;
+  gyro_roll = X2 << 8 | X3;
+  gyro_yaw = X4 << 8 | X5;
+}
