@@ -18,6 +18,10 @@ int pid_p_yaw_output, pid_i_yaw_output, pid_d_yaw_output = 0;
 float pid_i_roll_output_prev, pid_i_pitch_output_prev, pid_i_yaw_output_prev = 0;
 int pid_error_roll_prev, pid_error_pitch_prev, pid_error_yaw_prev = 0;
 float pid_roll_output, pid_pitch_output, pid_yaw_output = 0;
+int throttle = 0;
+int esc_fr, esc_fl, esc_rr, esc_rl = 0;
+byte last_channel_1, last_channel_2, last_channel_3, last_channel_4 = 0;
+unsigned long timer1, timer2, timer3, timer4 = 0;
 
 ///////////////////////////////////////////////////////////////////////////////////
 //  Controller Gain Values
@@ -25,17 +29,17 @@ float pid_roll_output, pid_pitch_output, pid_yaw_output = 0;
 float pid_p_roll_gain = 1;
 float pid_i_roll_gain = 1;
 float pid_d_roll_gain = 1;
-int max_roll_rate = 400; //Max roll rate
+int max_roll_rate = 200; //Max roll rate
 
 float pid_p_pitch_gain = 1;
 float pid_i_pitch_gain = 1;
 float pid_d_pitch_gain = 1;
-int max_pitch_rate = 400; //Max pitch rate
+int max_pitch_rate = 200; //Max pitch rate
 
 float pid_p_yaw_gain = 1;
 float pid_i_yaw_gain = 1;
 float pid_d_yaw_gain = 1;
-int max_yaw_rate = 400; //Max yaw rate
+int max_yaw_rate = 200; //Max yaw rate
 
 ///////////////////////////////////////////////////////////////
 // Gyro register addresses
@@ -55,6 +59,8 @@ int max_yaw_rate = 400; //Max yaw rate
 ///////////////////////////////////////////////////////////////////
 void setup() {
   Wire.begin();
+  Serial.begin(9600);
+
 
   DDRB |= B00000000;
   DDRD |= B11110000;
@@ -75,6 +81,7 @@ void setup() {
 
   //Calibrate gyros to determine the average bias per axis
   //Take 2000 samples
+  Serial.println("Starting gyro calibration");
   for(cal_int = 0; cal_int < 2000; cal_int++)
   {
     read_gyro();
@@ -88,6 +95,18 @@ void setup() {
   gyro_roll_cal = gyro_roll_cal / 2000 / LSB;
   gyro_yaw_cal = gyro_yaw_cal / 2000 / LSB;
 
+  Serial.print("Pitch = ");
+  Serial.print(gyro_pitch_cal);
+  Serial.print("\t");
+
+  Serial.print("Roll = ");
+  Serial.print(gyro_roll_cal);
+  Serial.print("\t");
+
+  Serial.print("Yaw = ");
+  Serial.println(gyro_yaw_cal);
+
+
   //Enable Pin Change Interrupts for Digital input pins 8-11 (from receiver)
   //Enable Pin Change Interrupts for PCINT[0:7]
   PCICR |= (1 << PCIE0);
@@ -98,27 +117,41 @@ void setup() {
   PCMSK0 |= (1 << PCINT3);
 
   //Create loop that runs until the receiver input is valid and safe (for throttle and yaw controls only)
-  while(receiver_channel_3 < 990 || receiver_channel_3 > 1020 || receiver_channel_4 < 1450 || receiver_channel_4 > 1550)
+  while(receiver_channel_3 < 950 || receiver_channel_3 > 1050 || receiver_channel_4 < 1450 || receiver_channel_4 > 1550)
   {
     //The ESCs will beep if no input is received, so will give them a 1000us pulse which is zero input
-    PORTD = PORTD | B11110000;
+    //PORTD = PORTD | B11110000;
     delayMicroseconds(1000);
-    PORTD = PORTD & B00001111;
-
+    //PORTD = PORTD & B00001111;
     delay(3);
+    Serial.println("Awaiting valid input from receiver.");
   }
+  
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////
 //Main loop for flight controller
 ///////////////////////////////////////////////////////////////////////////////////////////
 void loop() {
+  //print_outputs();
   // Read values from gyro. Remember values need to be divided by LSB to get value in deg/sec
   read_gyro();
   //Subtract gyro bias off each axis. Result in deg/sec
   gyro_pitch = gyro_pitch/LSB - gyro_pitch_cal;
   gyro_roll = gyro_roll/LSB - gyro_roll_cal;
   gyro_yaw = gyro_yaw/LSB - gyro_yaw_cal;
+
+  //Serial.print("Pitch = ");
+  //Serial.print(gyro_pitch);
+  //Serial.print("\t");
+
+  //Serial.print("Roll = ");
+  //Serial.print(gyro_roll);
+  //Serial.print("\t");
+
+  //Serial.print("Yaw = ");
+  //Serial.println(gyro_yaw);
+
 
   //Establish conditions for starting the flight
   //This condition will be for the throttle to be low and yaw moved max to the left, then back to centre
@@ -129,64 +162,157 @@ void loop() {
   if(start == 1 && receiver_channel_3 < 1050 && receiver_channel_4 > 1450)
   {
     start = 2;
-    //Need code here to reset the PID controllers
+    //Code to reset the PID controllers
+    pid_i_roll_output_prev = 0;
+    pid_error_roll_prev = 0;
+    pid_i_pitch_output_prev = 0;
+    pid_error_pitch_prev = 0;
+    pid_i_yaw_output_prev = 0;
+    pid_error_yaw_prev = 0;
   }
 
   //Establish conditions for stopping flight
   //This will be throttle low and yaw max to the right then back to centre
-  if(start == 2 && receiver_channel_3 < 1050 && receiver_channel_3 > 1950)
+  if(start == 2 && receiver_channel_3 < 1050 && receiver_channel_4 > 1950)
   {
     start = 0;
   }
 
   //Establish PID setpoint for roll in degrees per second - channel 1
   pid_roll_setpoint = 0;
-  //Include the next line once up n flying. It will prevent pitch roll n yaw when throttle is low
-  //if(receiver_channel_3 > 1050){}
-  if(receiver_channel_1 > 1508)
+  if(receiver_channel_3 > 1050)
   {
-    pid_roll_setpoint = (receiver_channel_1 - 1508) / 2; 
+    if(receiver_channel_1 > 1508)
+    {
+      pid_roll_setpoint = (receiver_channel_1 - 1508) / 2; 
+    }
+    else if(receiver_channel_1 < 1492)
+    {
+      pid_roll_setpoint = (receiver_channel_1 - 1492) / 2; 
+    }
   }
-  else if(receiver_channel_1 < 1492)
-  {
-    pid_roll_setpoint = (receiver_channel_1 - 1492) / 2; 
-  }
-
+  Serial.print("PID Roll Setpoint = ");
+  Serial.print(pid_roll_setpoint);
+  Serial.print("\t");
 
   //Establish PID setpoint for pitch in degrees per second - channel 2
   pid_pitch_setpoint = 0;
-  //Include the next line once up n flying. It will prevent pitch roll n yaw when throttle is low
-  //if(receiver_channel_3 > 1050){}
-  if(receiver_channel_2 > 1508)
+  if(receiver_channel_3 > 1050)
   {
-    pid_pitch_setpoint = (receiver_channel_2 - 1508) / 2; 
+    if(receiver_channel_2 > 1508)
+    {
+      pid_pitch_setpoint = (receiver_channel_2 - 1508) / 2; 
+    }
+    else if(receiver_channel_2 < 1492)
+    {
+      pid_pitch_setpoint = (receiver_channel_2 - 1492) / 2; 
+    }
   }
-  else if(receiver_channel_2 < 1492)
-  {
-    pid_pitch_setpoint = (receiver_channel_2 - 1492) / 2; 
-  }
-
+  Serial.print("PID Pitch Setpoint = ");
+  Serial.print(pid_pitch_setpoint);
+  Serial.print("\t");
 
   //Establish PID setpoint for yaw in degrees per second - channel 4
   pid_yaw_setpoint = 0;
-  //Include the next line once up n flying. It will prevent pitch roll n yaw when throttle is low
-  //if(receiver_channel_3 > 1050){}
-  if(receiver_channel_4 > 1508)
+  if(receiver_channel_3 > 1050)
   {
-    pid_yaw_setpoint = (receiver_channel_4 - 1508) / 2; 
+    if(receiver_channel_4 > 1508)
+    {
+      pid_yaw_setpoint = (receiver_channel_4 - 1508) / 2; 
+    }
+    else if(receiver_channel_4 < 1492)
+    {
+      pid_yaw_setpoint = (receiver_channel_4 - 1492) / 2; 
+    }
   }
-  else if(receiver_channel_4 < 1492)
-  {
-    pid_yaw_setpoint = (receiver_channel_4 - 1492) / 2; 
-  }  
-
+  Serial.print("PID Yaw Setpoint = ");
+  Serial.println(pid_yaw_setpoint);
+    
+/*
 ///////////////////////////////////////////////////////
 // Calculate the output of the PID Controller
 ///////////////////////////////////////////////////////
-calculate_pid();
+calculate_pid(); //Jumps to subroutine below this main loop
 
 
+///////////////////////////////////////////////////////////////////
+// Set the outputs to the ESCs based on throttle setting and PID outputs
+///////////////////////////////////////////////////////////////////
+throttle = receiver_channel_3;
+
+if(start == 2)
+  {
+    if(throttle>1800)
+    {
+      throttle = 1800;
+    }
+    esc_fr = throttle + pid_roll_output - pid_pitch_output + pid_yaw_output;
+    esc_fl = throttle - pid_roll_output - pid_pitch_output - pid_yaw_output;
+    esc_rr = throttle + pid_roll_output + pid_pitch_output - pid_yaw_output;
+    esc_rl = throttle - pid_roll_output + pid_pitch_output + pid_yaw_output;
+
+    if(esc_fr < 1200) esc_fr = 1200;
+    if(esc_rr < 1200) esc_rr = 1200;
+    if(esc_fl < 1200) esc_fl = 1200;
+    if(esc_rl < 1200) esc_rl = 1200;
+  }
+
+else
+  {
+  esc_fr = 1000;
+  esc_fl = 1000;
+  esc_rr = 1000;
+  esc_rl = 1000;
+  }
+*/
+} 
+
+//ISR that runs each time the input (on  any channel) from the receiver changes
+ISR(PCINT0_vect){
+  //check whether each pin is high or low, and if it's the same as the last sample (last_channel_x)
+  //Channel 1
+  if((PINB & B00000001) && (last_channel_1 == 0)){
+    timer1 = micros();
+    last_channel_1 = 1;
+  }
+  else if(!(PINB & B00000001) && (last_channel_1 == 1)){
+    receiver_channel_1 = micros() - timer1;
+    last_channel_1 = 0;
+  }
+
+  //Channel 2
+  if((PINB & B00000010) && (last_channel_2 == 0)){
+    timer2 = micros();
+    last_channel_2 = 1;
+  }
+  else if(!(PINB & B00000010) && (last_channel_2 == 1)){
+    receiver_channel_2 = micros() - timer2;
+    last_channel_2 = 0;
+  }
+
+  //Channel 3
+  if((PINB & B00000100) && (last_channel_3 == 0)){
+    timer3 = micros();
+    last_channel_3 = 1;
+  }
+  else if(!(PINB & B00000100) && (last_channel_3 == 1)){
+    receiver_channel_3 = micros() - timer3;
+    last_channel_3 = 0;
+  }
+
+  //Channel 4
+  if((PINB & B00001000) && (last_channel_4 == 0)){
+    timer4 = micros();
+    last_channel_4 = 1;
+  }
+  else if(!(PINB & B00001000) && (last_channel_4 == 1)){
+    receiver_channel_4 = micros() - timer4;
+    last_channel_4 = 0;
+  }
+
+//End of ISR
 }
+
 
 
 /////////////////////////////////////////////////////
@@ -234,6 +360,19 @@ void calculate_pid()
  
   pid_roll_output = pid_p_roll_output + pid_i_roll_output + pid_d_roll_output;
 
+  if(pid_roll_output> max_roll_rate)
+  {
+    pid_roll_output = max_roll_rate;
+  }
+  else if(pid_roll_output < max_roll_rate * -1)
+  {
+    pid_roll_output = max_roll_rate * -1;
+  }
+
+  pid_i_roll_output_prev = pid_i_roll_output;
+
+  pid_error_roll_prev = pid_error_roll;
+
   //Code of calculating the PID output for Pitch
   pid_error_pitch = gyro_pitch - pid_pitch_setpoint;
 
@@ -245,6 +384,19 @@ void calculate_pid()
  
   pid_pitch_output = pid_p_pitch_output + pid_i_pitch_output + pid_d_pitch_output;
 
+  if(pid_pitch_output> max_pitch_rate)
+  {
+    pid_pitch_output = max_pitch_rate;
+  }
+  else if(pid_pitch_output < max_pitch_rate * -1)
+  {
+    pid_pitch_output = max_pitch_rate * -1;
+  }
+
+  pid_i_pitch_output_prev = pid_i_pitch_output;
+
+  pid_error_pitch_prev = pid_error_pitch;
+
   //Code of calculating the PID output for Yaw
   pid_error_yaw = gyro_yaw - pid_yaw_setpoint;
 
@@ -255,4 +407,34 @@ void calculate_pid()
   pid_d_yaw_output = (pid_error_yaw - pid_error_yaw_prev) * pid_d_yaw_gain;
  
   pid_yaw_output = pid_p_yaw_output + pid_i_yaw_output + pid_d_yaw_output;
+
+  if(pid_yaw_output> max_yaw_rate)
+  {
+    pid_yaw_output = max_yaw_rate;
+  }
+  else if(pid_yaw_output < max_yaw_rate * -1)
+  {
+    pid_yaw_output = max_yaw_rate * -1;
+  }
+
+  pid_i_yaw_output_prev = pid_i_yaw_output;
+
+  pid_error_yaw_prev = pid_error_yaw;
+}
+
+void print_outputs(){
+  Serial.print("Channel 1: ");
+  Serial.print(receiver_channel_1);
+  Serial.print("\t");
+
+  Serial.print("Channel 2: ");
+  Serial.print(receiver_channel_2);
+  Serial.print("\t");
+
+  Serial.print("Channel 3: ");
+  Serial.print(receiver_channel_3);
+  Serial.print("\t");
+
+  Serial.print("Channel 4: ");
+  Serial.println(receiver_channel_4);
 }
