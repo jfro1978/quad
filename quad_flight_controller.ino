@@ -22,24 +22,26 @@ int throttle = 0;
 int esc_fr, esc_fl, esc_rr, esc_rl = 0;
 byte last_channel_1, last_channel_2, last_channel_3, last_channel_4 = 0;
 unsigned long timer1, timer2, timer3, timer4 = 0;
+unsigned long loop_timer, esc_loop_timer = 0;
+unsigned long timer_channel_1, timer_channel_2, timer_channel_3, timer_channel_4 = 0;
 
 ///////////////////////////////////////////////////////////////////////////////////
 //  Controller Gain Values
 ///////////////////////////////////////////////////////////////////////////////////
-float pid_p_roll_gain = 1;
-float pid_i_roll_gain = 1;
-float pid_d_roll_gain = 1;
-int max_roll_rate = 200; //Max roll rate
+float pid_p_roll_gain = 1; //was 0.2
+float pid_i_roll_gain = 0;
+float pid_d_roll_gain = 5 ; //was 5; 20 is waaaaay too much
+int max_roll_rate = 250; //Max roll rate
 
-float pid_p_pitch_gain = 1;
-float pid_i_pitch_gain = 1;
-float pid_d_pitch_gain = 1;
-int max_pitch_rate = 200; //Max pitch rate
+float pid_p_pitch_gain = pid_p_roll_gain;
+float pid_i_pitch_gain = pid_i_roll_gain;
+float pid_d_pitch_gain = pid_d_roll_gain;
+int max_pitch_rate = 250; //Max pitch rate
 
-float pid_p_yaw_gain = 1;
-float pid_i_yaw_gain = 1;
-float pid_d_yaw_gain = 1;
-int max_yaw_rate = 200; //Max yaw rate
+float pid_p_yaw_gain = 3;
+float pid_i_yaw_gain = 0.02;
+float pid_d_yaw_gain = 0;
+int max_yaw_rate = 250; //Max yaw rate
 
 ///////////////////////////////////////////////////////////////
 // Gyro register addresses
@@ -121,10 +123,10 @@ void setup() {
   {
     //The ESCs will beep if no input is received, so will give them a 1000us pulse which is zero input
     //PORTD = PORTD | B11110000;
-    delayMicroseconds(1000);
+    //delayMicroseconds(1000);
     //PORTD = PORTD & B00001111;
     delay(3);
-    Serial.println("Awaiting valid input from receiver.");
+    //Serial.println("Awaiting valid input from receiver.");
   }
   
 }
@@ -140,18 +142,6 @@ void loop() {
   gyro_pitch = gyro_pitch/LSB - gyro_pitch_cal;
   gyro_roll = gyro_roll/LSB - gyro_roll_cal;
   gyro_yaw = gyro_yaw/LSB - gyro_yaw_cal;
-
-  //Serial.print("Pitch = ");
-  //Serial.print(gyro_pitch);
-  //Serial.print("\t");
-
-  //Serial.print("Roll = ");
-  //Serial.print(gyro_roll);
-  //Serial.print("\t");
-
-  //Serial.print("Yaw = ");
-  //Serial.println(gyro_yaw);
-
 
   //Establish conditions for starting the flight
   //This condition will be for the throttle to be low and yaw moved max to the left, then back to centre
@@ -178,7 +168,7 @@ void loop() {
     start = 0;
   }
 
-  //Establish PID setpoint for roll in degrees per second - channel 1
+  //Establish PID setpoint for roll in degrees per second - channel 1 (roll)
   pid_roll_setpoint = 0;
   if(receiver_channel_3 > 1050)
   {
@@ -191,11 +181,9 @@ void loop() {
       pid_roll_setpoint = (receiver_channel_1 - 1492) / 2; 
     }
   }
-  Serial.print("PID Roll Setpoint = ");
-  Serial.print(pid_roll_setpoint);
-  Serial.print("\t");
 
-  //Establish PID setpoint for pitch in degrees per second - channel 2
+
+  //Establish PID setpoint for pitch in degrees per second - channel 2 (pitch)
   pid_pitch_setpoint = 0;
   if(receiver_channel_3 > 1050)
   {
@@ -208,9 +196,6 @@ void loop() {
       pid_pitch_setpoint = (receiver_channel_2 - 1492) / 2; 
     }
   }
-  Serial.print("PID Pitch Setpoint = ");
-  Serial.print(pid_pitch_setpoint);
-  Serial.print("\t");
 
   //Establish PID setpoint for yaw in degrees per second - channel 4
   pid_yaw_setpoint = 0;
@@ -225,10 +210,8 @@ void loop() {
       pid_yaw_setpoint = (receiver_channel_4 - 1492) / 2; 
     }
   }
-  Serial.print("PID Yaw Setpoint = ");
-  Serial.println(pid_yaw_setpoint);
     
-/*
+
 ///////////////////////////////////////////////////////
 // Calculate the output of the PID Controller
 ///////////////////////////////////////////////////////
@@ -246,15 +229,20 @@ if(start == 2)
     {
       throttle = 1800;
     }
-    esc_fr = throttle + pid_roll_output - pid_pitch_output + pid_yaw_output;
-    esc_fl = throttle - pid_roll_output - pid_pitch_output - pid_yaw_output;
-    esc_rr = throttle + pid_roll_output + pid_pitch_output - pid_yaw_output;
-    esc_rl = throttle - pid_roll_output + pid_pitch_output + pid_yaw_output;
+    esc_fr = throttle + pid_roll_output + pid_pitch_output + pid_yaw_output;
+    esc_fl = throttle - pid_roll_output + pid_pitch_output - pid_yaw_output;
+    esc_rr = throttle + pid_roll_output - pid_pitch_output - pid_yaw_output;
+    esc_rl = throttle - pid_roll_output - pid_pitch_output + pid_yaw_output;
 
-    if(esc_fr < 1200) esc_fr = 1200;
-    if(esc_rr < 1200) esc_rr = 1200;
-    if(esc_fl < 1200) esc_fl = 1200;
-    if(esc_rl < 1200) esc_rl = 1200;
+    if(esc_fr < 1080) esc_fr = 1080;
+    if(esc_rr < 1080) esc_rr = 1080;
+    if(esc_fl < 1080) esc_fl = 1080;
+    if(esc_rl < 1080) esc_rl = 1080;
+
+    if(esc_fr > 2000) esc_fr = 2000;
+    if(esc_rr > 2000) esc_rr = 2000;
+    if(esc_fl > 2000) esc_fl = 2000;
+    if(esc_rl > 2000) esc_rl = 2000;
   }
 
 else
@@ -264,7 +252,44 @@ else
   esc_rr = 1000;
   esc_rl = 1000;
   }
+/*
+  Serial.print("Front right = ");
+  Serial.print(esc_fr);
+  Serial.print("\t");
+
+  Serial.print("Front left = ");
+  Serial.print(esc_fl);
+  Serial.print("\t");
+
+  Serial.print("Rear right = ");
+  Serial.print(esc_rr);
+  Serial.print("\t");
+
+  Serial.print("Rear left = ");
+  Serial.println(esc_rl);
 */
+  //Need to write the values to the ESCs
+  //The refresh rate is 250Hz. That means the esc's need there pulse every 4ms.
+  while(micros() - loop_timer < 4000);          //Keep looping until 4ms is expired
+  loop_timer = micros();
+
+  //Set all PWM outputs to ESCs to high
+  PORTD |= B11110000;
+
+  timer_channel_1 = loop_timer + esc_fr;
+  timer_channel_2 = loop_timer + esc_rr;
+  timer_channel_3 = loop_timer + esc_rl;
+  timer_channel_4 = loop_timer + esc_fl;
+
+  while(PORTD >= 16)
+  {
+    esc_loop_timer = micros();
+    if(timer_channel_1 <= esc_loop_timer)PORTD &= B11101111;
+    if(timer_channel_2 <= esc_loop_timer)PORTD &= B11011111;
+    if(timer_channel_3 <= esc_loop_timer)PORTD &= B10111111;
+    if(timer_channel_4 <= esc_loop_timer)PORTD &= B01111111;
+  }
+  
 } 
 
 //ISR that runs each time the input (on  any channel) from the receiver changes
@@ -374,7 +399,7 @@ void calculate_pid()
   pid_error_roll_prev = pid_error_roll;
 
   //Code of calculating the PID output for Pitch
-  pid_error_pitch = gyro_pitch - pid_pitch_setpoint;
+  pid_error_pitch = -gyro_pitch - pid_pitch_setpoint;
 
   pid_p_pitch_output = pid_error_pitch * pid_p_pitch_gain;
 
