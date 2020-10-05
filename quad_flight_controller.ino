@@ -7,6 +7,8 @@ int start = 0;
 byte gyro_mask = 00000000; //Used to inhibit the self test, and set the Full Scale Range to 250 degrees per second
 byte reset_mask = 10000000;
 float gyro_pitch, gyro_roll, gyro_yaw = 0;
+float gyro_pitch_raw, gyro_roll_raw, gyro_yaw_raw = 0;
+float pitch_raw, roll_raw, yaw_raw = 0;
 float gyro_pitch_cal, gyro_roll_cal, gyro_yaw_cal = 0;
 uint8_t X0, X1, X2, X3, X4, X5 = 0;
 int receiver_channel_1, receiver_channel_2, receiver_channel_3, receiver_channel_4 = 0;
@@ -28,9 +30,9 @@ unsigned long timer_channel_1, timer_channel_2, timer_channel_3, timer_channel_4
 ///////////////////////////////////////////////////////////////////////////////////
 //  Controller Gain Values
 ///////////////////////////////////////////////////////////////////////////////////
-float pid_p_roll_gain = 1; //was 0.2
+float pid_p_roll_gain = 1.5; //was 0.2
 float pid_i_roll_gain = 0;
-float pid_d_roll_gain = 5 ; //was 5; 20 is waaaaay too much
+float pid_d_roll_gain = 25; 
 int max_roll_rate = 250; //Max roll rate
 
 float pid_p_pitch_gain = pid_p_roll_gain;
@@ -38,7 +40,7 @@ float pid_i_pitch_gain = pid_i_roll_gain;
 float pid_d_pitch_gain = pid_d_roll_gain;
 int max_pitch_rate = 250; //Max pitch rate
 
-float pid_p_yaw_gain = 3;
+float pid_p_yaw_gain = 0.5;
 float pid_i_yaw_gain = 0.02;
 float pid_d_yaw_gain = 0;
 int max_yaw_rate = 250; //Max yaw rate
@@ -67,6 +69,7 @@ void setup() {
   DDRB |= B00000000;
   DDRD |= B11110000;
 
+
   //Reset the IMU 
   Wire.beginTransmission(IMU_address);
   Wire.write(PWR_MGMT_1);
@@ -87,9 +90,9 @@ void setup() {
   for(cal_int = 0; cal_int < 2000; cal_int++)
   {
     read_gyro();
-    gyro_pitch_cal += gyro_pitch;
-    gyro_roll_cal += gyro_roll;
-    gyro_yaw_cal += gyro_yaw;
+    gyro_pitch_cal += gyro_pitch_raw;
+    gyro_roll_cal += gyro_roll_raw;
+    gyro_yaw_cal += gyro_yaw_raw;
     delay(4);
   }
   //Divide total number by 2000 to get per sample value, then divide by 131 (LSB) to get value in deg/sec
@@ -138,11 +141,26 @@ void loop() {
   //print_outputs();
   // Read values from gyro. Remember values need to be divided by LSB to get value in deg/sec
   read_gyro();
-  //Subtract gyro bias off each axis. Result in deg/sec
-  gyro_pitch = gyro_pitch/LSB - gyro_pitch_cal;
-  gyro_roll = gyro_roll/LSB - gyro_roll_cal;
-  gyro_yaw = gyro_yaw/LSB - gyro_yaw_cal;
 
+  //Get the raw (unfiltered) gyro readings. Subtract the bias off each axis. Result in deg/sec 
+  pitch_raw = gyro_pitch_raw/LSB - gyro_pitch_cal;
+  roll_raw = gyro_roll_raw/LSB - gyro_roll_cal;
+  yaw_raw = gyro_yaw_raw/LSB - gyro_roll_cal;
+  
+  //Filter the raw gyro data using an 80/20 filter
+  gyro_pitch = (gyro_pitch * 0.8) + (pitch_raw * 0.2);
+  gyro_roll = (gyro_roll * 0.8) + (roll_raw * 0.2);
+  gyro_yaw = (gyro_yaw * 0.8) + (yaw_raw * 0.2);
+
+  /*Print out the raw and filtered gyro readings, pitch only
+  Serial.print("Pitch raw = ");
+  Serial.print(pitch_raw);
+  Serial.print("\t");
+
+  Serial.print("Pitch filtered = ");
+  Serial.println(gyro_pitch);
+*/
+// Start of comment-out to confirm gyro readings have been filtered correctly. 
   //Establish conditions for starting the flight
   //This condition will be for the throttle to be low and yaw moved max to the left, then back to centre
   if(receiver_channel_3 < 1050 && receiver_channel_4 < 1050)
@@ -252,22 +270,7 @@ else
   esc_rr = 1000;
   esc_rl = 1000;
   }
-/*
-  Serial.print("Front right = ");
-  Serial.print(esc_fr);
-  Serial.print("\t");
 
-  Serial.print("Front left = ");
-  Serial.print(esc_fl);
-  Serial.print("\t");
-
-  Serial.print("Rear right = ");
-  Serial.print(esc_rr);
-  Serial.print("\t");
-
-  Serial.print("Rear left = ");
-  Serial.println(esc_rl);
-*/
   //Need to write the values to the ESCs
   //The refresh rate is 250Hz. That means the esc's need there pulse every 4ms.
   while(micros() - loop_timer < 4000);          //Keep looping until 4ms is expired
@@ -289,7 +292,9 @@ else
     if(timer_channel_3 <= esc_loop_timer)PORTD &= B10111111;
     if(timer_channel_4 <= esc_loop_timer)PORTD &= B01111111;
   }
-  
+
+//End of main loop
+ //Delete this end-comment after confirming that the gyro readings have been filtered correctly. 
 } 
 
 //ISR that runs each time the input (on  any channel) from the receiver changes
@@ -362,9 +367,9 @@ void read_gyro()
         X5 = Wire.read();
       }
       
-    gyro_pitch = X0 << 8 | X1;
-    gyro_roll = X2 << 8 | X3;
-    gyro_yaw = X4 << 8 | X5;
+    gyro_pitch_raw = X0 << 8 | X1;
+    gyro_roll_raw = X2 << 8 | X3;
+    gyro_yaw_raw = X4 << 8 | X5;
 }
 
 
@@ -445,21 +450,4 @@ void calculate_pid()
   pid_i_yaw_output_prev = pid_i_yaw_output;
 
   pid_error_yaw_prev = pid_error_yaw;
-}
-
-void print_outputs(){
-  Serial.print("Channel 1: ");
-  Serial.print(receiver_channel_1);
-  Serial.print("\t");
-
-  Serial.print("Channel 2: ");
-  Serial.print(receiver_channel_2);
-  Serial.print("\t");
-
-  Serial.print("Channel 3: ");
-  Serial.print(receiver_channel_3);
-  Serial.print("\t");
-
-  Serial.print("Channel 4: ");
-  Serial.println(receiver_channel_4);
 }
