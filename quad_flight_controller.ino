@@ -13,10 +13,10 @@ float gyro_pitch_cal, gyro_roll_cal, gyro_yaw_cal = 0;
 uint8_t X0, X1, X2, X3, X4, X5 = 0;
 int receiver_channel_1, receiver_channel_2, receiver_channel_3, receiver_channel_4 = 0;
 int pid_roll_setpoint, pid_pitch_setpoint, pid_yaw_setpoint = 0; 
-int pid_error_roll, pid_error_pitch, pid_error_yaw = 0; 
-int pid_p_roll_output, pid_i_roll_output, pid_d_roll_output = 0;
-int pid_p_pitch_output, pid_i_pitch_output, pid_d_pitch_output = 0;
-int pid_p_yaw_output, pid_i_yaw_output, pid_d_yaw_output = 0;
+float pid_error_roll, pid_error_pitch, pid_error_yaw = 0; 
+float pid_p_roll_output, pid_i_roll_output, pid_d_roll_output = 0;
+float pid_p_pitch_output, pid_i_pitch_output, pid_d_pitch_output = 0;
+float pid_p_yaw_output, pid_i_yaw_output, pid_d_yaw_output = 0;
 float pid_i_roll_output_prev, pid_i_pitch_output_prev, pid_i_yaw_output_prev = 0;
 int pid_error_roll_prev, pid_error_pitch_prev, pid_error_yaw_prev = 0;
 float pid_roll_output, pid_pitch_output, pid_yaw_output = 0;
@@ -30,9 +30,9 @@ unsigned long timer_channel_1, timer_channel_2, timer_channel_3, timer_channel_4
 ///////////////////////////////////////////////////////////////////////////////////
 //  Controller Gain Values
 ///////////////////////////////////////////////////////////////////////////////////
-float pid_p_roll_gain = 1.5; //was 0.2
-float pid_i_roll_gain = 0;
-float pid_d_roll_gain = 25; 
+float pid_p_roll_gain = 1; //was 1.5
+float pid_i_roll_gain = 0.02;
+float pid_d_roll_gain = 15; //was 25; 
 int max_roll_rate = 250; //Max roll rate
 
 float pid_p_pitch_gain = pid_p_roll_gain;
@@ -40,7 +40,7 @@ float pid_i_pitch_gain = pid_i_roll_gain;
 float pid_d_pitch_gain = pid_d_roll_gain;
 int max_pitch_rate = 250; //Max pitch rate
 
-float pid_p_yaw_gain = 0.5;
+float pid_p_yaw_gain = 3;
 float pid_i_yaw_gain = 0.02;
 float pid_d_yaw_gain = 0;
 int max_yaw_rate = 250; //Max yaw rate
@@ -63,7 +63,7 @@ int max_yaw_rate = 250; //Max yaw rate
 ///////////////////////////////////////////////////////////////////
 void setup() {
   Wire.begin();
-  Serial.begin(9600);
+//  Serial.begin(9600);
 
 
   DDRB |= B00000000;
@@ -100,6 +100,7 @@ void setup() {
   gyro_roll_cal = gyro_roll_cal / 2000 / LSB;
   gyro_yaw_cal = gyro_yaw_cal / 2000 / LSB;
 
+/*
   Serial.print("Pitch = ");
   Serial.print(gyro_pitch_cal);
   Serial.print("\t");
@@ -110,7 +111,7 @@ void setup() {
 
   Serial.print("Yaw = ");
   Serial.println(gyro_yaw_cal);
-
+*/
 
   //Enable Pin Change Interrupts for Digital input pins 8-11 (from receiver)
   //Enable Pin Change Interrupts for PCINT[0:7]
@@ -145,7 +146,7 @@ void loop() {
   //Get the raw (unfiltered) gyro readings. Subtract the bias off each axis. Result in deg/sec 
   pitch_raw = gyro_pitch_raw/LSB - gyro_pitch_cal;
   roll_raw = gyro_roll_raw/LSB - gyro_roll_cal;
-  yaw_raw = gyro_yaw_raw/LSB - gyro_roll_cal;
+  yaw_raw = gyro_yaw_raw/LSB - gyro_yaw_cal;
   
   //Filter the raw gyro data using an 80/20 filter
   gyro_pitch = (gyro_pitch * 0.8) + (pitch_raw * 0.2);
