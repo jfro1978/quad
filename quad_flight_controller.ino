@@ -33,17 +33,20 @@ unsigned long timer_channel_1, timer_channel_2, timer_channel_3, timer_channel_4
 float pid_p_roll_gain = 1; //was 1.5
 float pid_i_roll_gain = 0.02;
 float pid_d_roll_gain = 15; //was 25; 
-int max_roll_rate = 250; //Max roll rate
+int max_roll_rate = 90; //Max roll rate in deg/s
+int max_roll_rate_index = 5; //This number limits the roll setpoint from the controller. Set a larger number for less responsive control
 
 float pid_p_pitch_gain = pid_p_roll_gain;
 float pid_i_pitch_gain = pid_i_roll_gain;
 float pid_d_pitch_gain = pid_d_roll_gain;
-int max_pitch_rate = 250; //Max pitch rate
+int max_pitch_rate = 90; //Max pitch rate in deg/s
+int max_pitch_rate_index = 5; //This number limits the pitch setpoint from the controller. Set a larger number for less responsive control
 
 float pid_p_yaw_gain = 3;
 float pid_i_yaw_gain = 0.02;
 float pid_d_yaw_gain = 0;
-int max_yaw_rate = 250; //Max yaw rate
+int max_yaw_rate = 90; //Max yaw rate in deg/s
+int max_yaw_rate_index = 5; //This number limits the yaw setpoint from the controller. Set a larger number for less responsive control
 
 ///////////////////////////////////////////////////////////////
 // Gyro register addresses
@@ -193,11 +196,11 @@ void loop() {
   {
     if(receiver_channel_1 > 1508)
     {
-      pid_roll_setpoint = (receiver_channel_1 - 1508) / 2; 
+      pid_roll_setpoint = (receiver_channel_1 - 1508) / max_roll_rate_index; 
     }
     else if(receiver_channel_1 < 1492)
     {
-      pid_roll_setpoint = (receiver_channel_1 - 1492) / 2; 
+      pid_roll_setpoint = (receiver_channel_1 - 1492) / max_roll_rate_index; 
     }
   }
 
@@ -208,11 +211,11 @@ void loop() {
   {
     if(receiver_channel_2 > 1508)
     {
-      pid_pitch_setpoint = (receiver_channel_2 - 1508) / 2; 
+      pid_pitch_setpoint = (receiver_channel_2 - 1508) / max_pitch_rate_index; 
     }
     else if(receiver_channel_2 < 1492)
     {
-      pid_pitch_setpoint = (receiver_channel_2 - 1492) / 2; 
+      pid_pitch_setpoint = (receiver_channel_2 - 1492) / max_pitch_rate_index; 
     }
   }
 
@@ -222,11 +225,11 @@ void loop() {
   {
     if(receiver_channel_4 > 1508)
     {
-      pid_yaw_setpoint = (receiver_channel_4 - 1508) / 2; 
+      pid_yaw_setpoint = (receiver_channel_4 - 1508) / max_yaw_rate_index; 
     }
     else if(receiver_channel_4 < 1492)
     {
-      pid_yaw_setpoint = (receiver_channel_4 - 1492) / 2; 
+      pid_yaw_setpoint = (receiver_channel_4 - 1492) / max_yaw_rate_index; 
     }
   }
     
