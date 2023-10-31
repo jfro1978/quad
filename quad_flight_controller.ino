@@ -31,7 +31,7 @@ unsigned long timer_channel_1, timer_channel_2, timer_channel_3, timer_channel_4
 //  Controller Gain Values
 ///////////////////////////////////////////////////////////////////////////////////
 float pid_p_roll_gain = 1; //was 1.5
-float pid_i_roll_gain = 1;
+float pid_i_roll_gain = 0.4;
 float pid_d_roll_gain = 15; //was 25; 
 int max_roll_rate = 250; //Max roll rate
 
@@ -88,6 +88,7 @@ void setup() {
 
   //Calibrate gyros to determine the average bias per axis
   //Take 2000 samples
+  Serial.println("Starting gyro calibration.");
   for(cal_int = 0; cal_int < 2000; cal_int++)
   {
     read_gyro();
@@ -101,6 +102,14 @@ void setup() {
   gyro_roll_cal = gyro_roll_cal / 2000 / LSB;
   gyro_yaw_cal = gyro_yaw_cal / 2000 / LSB;
 
+  Serial.println("Completed gyro calibration.");
+  Serial.print("Pitch axis bias (deg/s): ");
+  Serial.println(gyro_pitch_cal);
+  Serial.print("Roll axis bias (deg/s): ");
+  Serial.println(gyro_roll_cal);
+  Serial.print("Yaw axis bias (deg/s): ");
+  Serial.println(gyro_yaw_cal);
+
   //Enable Pin Change Interrupts for Digital input pins 8-11 (from receiver)
   //Enable Pin Change Interrupts for PCINT[0:7]
   PCICR |= (1 << PCIE0);
@@ -110,11 +119,6 @@ void setup() {
   PCMSK0 |= (1 << PCINT2);
   PCMSK0 |= (1 << PCINT3);
 
-//  //Set all PWM outputs to ESCs to high
-//  PORTD |= B11110000;
-//  delay(1);
-//  PORTD &= B00001111;
-
   //Create loop that runs until the receiver input is valid and safe (for throttle and yaw controls only)
   while(receiver_channel_3 < 950)
   {
@@ -123,6 +127,8 @@ void setup() {
 
   //Assign current time to 'loop_timer'
   loop_timer = micros(); 
+
+  Serial.println("Entering main loop.");
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////
