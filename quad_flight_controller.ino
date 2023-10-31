@@ -31,7 +31,7 @@ unsigned long timer_channel_1, timer_channel_2, timer_channel_3, timer_channel_4
 //  Controller Gain Values
 ///////////////////////////////////////////////////////////////////////////////////
 float pid_p_roll_gain = 1; //was 1.5
-float pid_i_roll_gain = 0.4;
+float pid_i_roll_gain = 0.12;
 float pid_d_roll_gain = 15; //was 25; 
 int max_roll_rate = 250; //Max roll rate
 
@@ -249,15 +249,6 @@ void loop() {
     esc_rr = throttle + pid_roll_output + pid_pitch_output - pid_yaw_output;     
     esc_rl = throttle - pid_roll_output + pid_pitch_output + pid_yaw_output;
 
-//   Serial.print("Front right: ");
-//   Serial.print(esc_fr);
-//   Serial.print(", Front left: ");
-//   Serial.print(esc_fl);
-//   Serial.print(", Rear right: ");
-//   Serial.print(esc_rr);
-//   Serial.print(", Rear left: ");
-//   Serial.println(esc_rl);
-
     if(esc_fr < 1080) esc_fr = 1080;
     if(esc_rr < 1080) esc_rr = 1080;;
     
@@ -276,6 +267,15 @@ void loop() {
     esc_rr = 1000;
     esc_rl = 1000;
   }
+
+//   Serial.print("Front right: ");
+//   Serial.print(esc_fr);
+//   Serial.print(", Front left: ");
+//   Serial.print(esc_fl);
+//   Serial.print(", Rear right: ");
+//   Serial.print(esc_rr);
+//   Serial.print(", Rear left: ");
+//   Serial.println(esc_rl);
 
   //Need to write the values to the ESCs
   //The refresh rate is 250Hz. That means the esc's need their pulse every 4ms.
