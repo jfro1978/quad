@@ -30,9 +30,9 @@ unsigned long timer_channel_1, timer_channel_2, timer_channel_3, timer_channel_4
 ///////////////////////////////////////////////////////////////////////////////////
 //  Controller Gain Values
 ///////////////////////////////////////////////////////////////////////////////////
-float pid_p_roll_gain = 1; //was 1.5
-float pid_i_roll_gain = 0.12;
-float pid_d_roll_gain = 15; //was 25; 
+float pid_p_roll_gain = 1.0; //was 1.0
+float pid_i_roll_gain = 0.12; //was 0.12
+float pid_d_roll_gain = 15; //was 15; 
 int max_roll_rate = 250; //Max roll rate
 
 float pid_p_pitch_gain = pid_p_roll_gain;
